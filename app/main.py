@@ -199,11 +199,34 @@ from datetime import datetime
 from collections import defaultdict
 from datetime import datetime
 
-@app.get("/resumen")
-def resumen(db: Session = Depends(get_db)):
 
-    registros = db.query(Attendance).order_by(Attendance.fecha).all()
+from fastapi import Query
+
+@app.get("/resumen")
+def resumen(
+    user_id: int = Query(None),
+    fecha_inicio: str = Query(None),
+    fecha_fin: str = Query(None),
+    db: Session = Depends(get_db)
+):
+
+    query = db.query(Attendance)
+
+    # 🔍 filtro por usuario
+    if user_id:
+        query = query.filter(Attendance.user_id == user_id)
+
+    # 🔍 filtro por fechas
+    if fecha_inicio:
+        query = query.filter(Attendance.fecha >= fecha_inicio)
+
+    if fecha_fin:
+        query = query.filter(Attendance.fecha <= fecha_fin)
+
+    registros = query.order_by(Attendance.fecha).all()
     users = db.query(User).all()
+
+    from collections import defaultdict
 
     resumen = defaultdict(lambda: {
         "user": "",
@@ -212,7 +235,6 @@ def resumen(db: Session = Depends(get_db)):
         "retiros": 0
     })
 
-    # agrupar por usuario y por día
     agrupado = defaultdict(lambda: defaultdict(list))
 
     for r in registros:
@@ -229,7 +251,6 @@ def resumen(db: Session = Depends(get_db)):
 
         for fecha, registros_dia in dias.items():
 
-            # 🔥 ORDENAR registros del día
             registros_dia.sort(key=lambda x: x.fecha)
 
             entrada = None
@@ -241,60 +262,48 @@ def resumen(db: Session = Depends(get_db)):
 
                 hora = r.fecha.hour
 
-                # ✅ PRIMERA entrada del día
                 if r.tipo == "entrada" and not entrada:
                     entrada = r.fecha
                     if hora >= 10:
                         resumen[user_id]["atrasos"] += 1
 
-                # ✅ ÚLTIMA salida del día
                 elif r.tipo == "salida":
                     salida = r.fecha
                     if hora < 18:
                         resumen[user_id]["retiros"] += 1
 
-                # ✅ PRIMERA salida a colación
                 elif r.tipo == "salida_colacion" and not salida_colacion:
                     salida_colacion = r.fecha
 
-                # ✅ ÚLTIMA entrada de colación
                 elif r.tipo == "entrada_colacion":
                     entrada_colacion = r.fecha
 
-            # 🔥 CALCULAR HORAS SOLO SI ES VÁLIDO
             if entrada and salida and salida > entrada:
 
                 total = (salida - entrada).total_seconds()
 
-                # descontar colación SOLO si está bien formada
-                if (
-                    salida_colacion and entrada_colacion and
-                    entrada_colacion > salida_colacion
-                ):
+                if salida_colacion and entrada_colacion and entrada_colacion > salida_colacion:
                     colacion = (entrada_colacion - salida_colacion).total_seconds()
                     total -= colacion
 
-                # 🚨 evitar negativos (ULTRA IMPORTANTE)
                 if total < 0:
                     total = 0
 
                 resumen[user_id]["horas"] += total
 
-    # 🔄 convertir a formato final
     resultado = []
 
     for r in resumen.values():
-
         horas = int(r["horas"] // 3600)
         minutos = int((r["horas"] % 3600) // 60)
 
         resultado.append({
+            "user_id": user_id,
             "user": r["user"],
             "horas": f"{horas}h {minutos}min",
             "atrasos": r["atrasos"],
             "retiros": r["retiros"]
         })
-
 
     return resultado
 
@@ -332,18 +341,21 @@ from openpyxl import Workbook
 import os
 
 @app.get("/exportar-excel")
-def exportar_excel(db: Session = Depends(get_db)):
+def exportar_excel(
+    user_id: int = Query(None),
+    fecha_inicio: str = Query(None),
+    fecha_fin: str = Query(None),
+    db: Session = Depends(get_db)
+):
 
-    data = resumen(db)  # reutilizamos tu función actual
+    data = resumen(user_id, fecha_inicio, fecha_fin, db)
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Resumen"
 
-    # encabezados
     ws.append(["Usuario", "Horas", "Atrasos", "Retiros"])
 
-    # datos
     for r in data:
         ws.append([
             r["user"],
@@ -352,7 +364,6 @@ def exportar_excel(db: Session = Depends(get_db)):
             r["retiros"]
         ])
 
-    # guardar archivo
     file_path = "reporte_asistencia.xlsx"
     wb.save(file_path)
 
