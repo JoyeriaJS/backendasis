@@ -83,23 +83,15 @@ def marcar(data: dict, db: Session = Depends(get_db)):
     lat = data["lat"]
     lng = data["lng"]
 
-    # 👇 viene desde frontend
-    accuracy = data.get("accuracy", 2000)
+    # 👇 opcional (viene del frontend)
+    accuracy = data.get("accuracy", 50)
 
-    # 🚫 bloquear GPS MUY malo
-    if accuracy > 150:
-        return {
-            "error": "Señal GPS muy baja, intenta acercarte a una zona con mejor señal",
-            "accuracy": accuracy
-        }
-
-    # 📍 calcular distancia real
+    # 📍 calcular distancia
     distancia = calcular_distancia_metros(lat, lng, LAT_EMPRESA, LNG_EMPRESA)
 
-    # 🧠 margen dinámico REAL (clave)
-    margen = DISTANCIA_MAX_METROS + (accuracy * 0.8)
+    # 🧠 margen dinámico (LA SOLUCIÓN REAL)
+    margen = max(DISTANCIA_MAX_METROS, accuracy)
 
-    # 🚫 validación final
     if distancia > margen:
         return {
             "error": "Fuera de la zona permitida",
