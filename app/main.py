@@ -33,6 +33,8 @@ LNG_EMPRESA = -70.65131659585872
 DISTANCIA_MAX_METROS = 10
 
 
+
+
 # ✅ conexión BD
 def get_db():
     db = SessionLocal()
@@ -84,22 +86,27 @@ def marcar(data: dict, db: Session = Depends(get_db)):
     lat = data["lat"]
     lng = data["lng"]
 
-    # 🧠 NUEVO: validar precisión GPS
+    # 🧠 NUEVO: precisión GPS (más flexible para interiores)
     accuracy = data.get("accuracy", 9999)
 
-    if accuracy > 30:
+    # 🚫 si el GPS es MUY malo (ej: 2000)
+    if accuracy > 150:
         return {
-            "error": "GPS impreciso, intenta nuevamente",
+            "error": "Señal GPS muy baja, intenta acercarte a una zona con mejor señal",
             "accuracy": accuracy
         }
 
     # 📍 calcular distancia
     distancia = calcular_distancia_metros(lat, lng, LAT_EMPRESA, LNG_EMPRESA)
 
-    if distancia > DISTANCIA_MAX_METROS:
+    # 🧠 margen dinámico (clave para galerías)
+    margen = max(DISTANCIA_MAX_METROS, accuracy)
+
+    if distancia > margen:
         return {
             "error": "Fuera de la zona permitida",
-            "distancia_metros": round(distancia, 2)
+            "distancia_metros": round(distancia, 2),
+            "accuracy": accuracy
         }
 
     # 📅 obtener registros de HOY
@@ -148,7 +155,7 @@ def marcar(data: dict, db: Session = Depends(get_db)):
         "message": f"{tipo.replace('_', ' ').capitalize()} registrada",
         "tipo": tipo,
         "distancia_metros": round(distancia, 2),
-        "accuracy": accuracy  # 👈 útil para debug
+        "accuracy": accuracy
     }
 
 @app.get("/estado/{user_id}")
