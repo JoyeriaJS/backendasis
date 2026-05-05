@@ -93,13 +93,18 @@ def marcar(data: dict, db: Session = Depends(get_db)):
 
     # 🧠 lógica inteligente para celular vs PC
 
-    if accuracy > 500:
-        # 🚨 GPS MUY MALO (interior extremo)
-        margen = DISTANCIA_MAX_METROS + 100
+    # 🧠 margen dinámico inteligente
+    if accuracy > 1000:
+        margen = DISTANCIA_MAX_METROS + 500  # fallback indoor
+    else:
+        margen = DISTANCIA_MAX_METROS + (accuracy * 0.8)
 
-    elif accuracy > 100:
-        # 📡 GPS normal en interiores
-        margen = DISTANCIA_MAX_METROS + 70
+    if distancia > margen:
+        return {
+            "error": "Fuera de la zona permitida",
+            "distancia_metros": round(distancia, 2),
+            "accuracy": accuracy
+        }
 
     else:
         # 📍 GPS bueno (PC o exterior)
