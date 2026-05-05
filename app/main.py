@@ -307,6 +307,18 @@ def resumen(
 
     return resultado
 
+@app.get("/usuarios")
+def obtener_usuarios(db: Session = Depends(get_db)):
+    users = db.query(User).all()
+
+    return [
+        {
+            "id": u.id,
+            "username": u.username
+        }
+        for u in users
+    ]
+
 
 @app.get("/siguiente/{user_id}")
 def siguiente(user_id: int, db: Session = Depends(get_db)):
