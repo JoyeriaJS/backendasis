@@ -28,9 +28,9 @@ app.add_middleware(
 Base.metadata.create_all(bind=engine)
 
 # 📍 ubicación empresa
-LAT_EMPRESA = -33.44144144144144
-LNG_EMPRESA = -70.65131659585872
-DISTANCIA_MAX_METROS = 10
+LAT_EMPRESA = -33.4394545
+LNG_EMPRESA = -70.6493824
+DISTANCIA_MAX_METROS = 80
 
 
 # ✅ conexión BD
@@ -83,15 +83,23 @@ def marcar(data: dict, db: Session = Depends(get_db)):
     lat = data["lat"]
     lng = data["lng"]
 
-    # 👇 opcional (viene del frontend)
-    accuracy = data.get("accuracy", 50)
+    # 👇 viene desde frontend
+    accuracy = data.get("accuracy", 999)
 
-    # 📍 calcular distancia
+    # 🚫 bloquear GPS MUY malo
+    if accuracy > 150:
+        return {
+            "error": "Señal GPS muy baja, intenta acercarte a una zona con mejor señal",
+            "accuracy": accuracy
+        }
+
+    # 📍 calcular distancia real
     distancia = calcular_distancia_metros(lat, lng, LAT_EMPRESA, LNG_EMPRESA)
 
-    # 🧠 margen dinámico (LA SOLUCIÓN REAL)
-    margen = max(DISTANCIA_MAX_METROS, accuracy)
+    # 🧠 margen dinámico REAL (clave)
+    margen = DISTANCIA_MAX_METROS + (accuracy * 0.8)
 
+    # 🚫 validación final
     if distancia > margen:
         return {
             "error": "Fuera de la zona permitida",
