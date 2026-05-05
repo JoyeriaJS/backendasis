@@ -71,7 +71,6 @@ def login(data: dict, db: Session = Depends(get_db)):
 
 # 📍 MARCAR ASISTENCIA REAL
 @app.post("/marcar")
-@app.post("/marcar")
 def marcar(data: dict, db: Session = Depends(get_db)):
 
     # ✅ validar datos
@@ -85,38 +84,27 @@ def marcar(data: dict, db: Session = Depends(get_db)):
     lat = data["lat"]
     lng = data["lng"]
 
-    # 👇 viene del frontend (IMPORTANTE)
-    accuracy = data.get("accuracy", 200)
+    # 👇 viene del frontend
+    accuracy = data.get("accuracy", 999)
 
     # 📍 calcular distancia
     distancia = calcular_distancia_metros(lat, lng, LAT_EMPRESA, LNG_EMPRESA)
 
-    # 🧠 lógica inteligente para celular vs PC
-
-    # 🧠 margen dinámico inteligente
-    if accuracy > 1000:
-        margen = DISTANCIA_MAX_METROS + 500  # fallback indoor
+    # 🔥 SOLUCIÓN REAL PARA INTERIOR (galería, piso 9, etc)
+    if accuracy >= 1000:
+        # GPS muy malo → permitir pero con límite razonable
+        margen = 600   # 👈 ajusta entre 400 y 800 según pruebas
     else:
-        margen = DISTANCIA_MAX_METROS + (accuracy * 0.8)
+        # GPS decente
+        margen = DISTANCIA_MAX_METROS + (accuracy * 0.7)
 
-    if distancia > margen:
-        return {
-            "error": "Fuera de la zona permitida",
-            "distancia_metros": round(distancia, 2),
-            "accuracy": accuracy
-        }
-
-    else:
-        # 📍 GPS bueno (PC o exterior)
-        margen = DISTANCIA_MAX_METROS + (accuracy * 0.5)
-
-    # 🚫 validación final
+    # 🚫 validación final (UNA sola vez)
     if distancia > margen:
         return {
             "error": "Fuera de la zona permitida",
             "distancia_metros": round(distancia, 2),
             "accuracy": accuracy,
-            "margen": round(margen, 2)
+            "margen": margen
         }
 
     # 📅 registros de HOY
@@ -132,13 +120,9 @@ def marcar(data: dict, db: Session = Depends(get_db)):
         .all()
     )
 
-    cantidad = len(registros_hoy)
-
-    # 🚫 máximo 4 marcajes
-    if cantidad >= 4:
+    if len(registros_hoy) >= 4:
         return {"error": "Ya completaste tus 4 marcajes del día"}
 
-    # 🎯 tipos automáticos
     tipos = [
         "entrada",
         "salida_colacion",
@@ -146,9 +130,8 @@ def marcar(data: dict, db: Session = Depends(get_db)):
         "salida"
     ]
 
-    tipo = tipos[cantidad]
+    tipo = tipos[len(registros_hoy)]
 
-    # 💾 guardar en BD
     nuevo = Attendance(
         user_id=user_id,
         lat=lat,
@@ -166,7 +149,7 @@ def marcar(data: dict, db: Session = Depends(get_db)):
         "tipo": tipo,
         "distancia_metros": round(distancia, 2),
         "accuracy": accuracy,
-        "margen": round(margen, 2)
+        "margen": margen
     }
 
 @app.get("/estado/{user_id}")
