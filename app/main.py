@@ -71,6 +71,7 @@ def login(data: dict, db: Session = Depends(get_db)):
 
 # 📍 MARCAR ASISTENCIA REAL
 @app.post("/marcar")
+@app.post("/marcar")
 def marcar(data: dict, db: Session = Depends(get_db)):
 
     # ✅ validar datos
@@ -84,16 +85,36 @@ def marcar(data: dict, db: Session = Depends(get_db)):
     lat = data["lat"]
     lng = data["lng"]
 
+    # 👇 viene del frontend (IMPORTANTE)
+    accuracy = data.get("accuracy", 200)
+
     # 📍 calcular distancia
     distancia = calcular_distancia_metros(lat, lng, LAT_EMPRESA, LNG_EMPRESA)
 
-    if distancia > DISTANCIA_MAX_METROS:
+    # 🧠 lógica inteligente para celular vs PC
+
+    if accuracy > 500:
+        # 🚨 GPS MUY MALO (interior extremo)
+        margen = DISTANCIA_MAX_METROS + 100
+
+    elif accuracy > 100:
+        # 📡 GPS normal en interiores
+        margen = DISTANCIA_MAX_METROS + 70
+
+    else:
+        # 📍 GPS bueno (PC o exterior)
+        margen = DISTANCIA_MAX_METROS + (accuracy * 0.5)
+
+    # 🚫 validación final
+    if distancia > margen:
         return {
             "error": "Fuera de la zona permitida",
-            "distancia_metros": round(distancia, 2)
+            "distancia_metros": round(distancia, 2),
+            "accuracy": accuracy,
+            "margen": round(margen, 2)
         }
 
-    # 📅 obtener registros de HOY
+    # 📅 registros de HOY
     hoy = date.today()
 
     registros_hoy = (
@@ -138,7 +159,9 @@ def marcar(data: dict, db: Session = Depends(get_db)):
     return {
         "message": f"{tipo.replace('_', ' ').capitalize()} registrada",
         "tipo": tipo,
-        "distancia_metros": round(distancia, 2)
+        "distancia_metros": round(distancia, 2),
+        "accuracy": accuracy,
+        "margen": round(margen, 2)
     }
 
 @app.get("/estado/{user_id}")
