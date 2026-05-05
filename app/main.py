@@ -370,3 +370,4 @@ def exportar_excel(db: Session = Depends(get_db)):
 def require_admin(user):
     if user.rol != "admin":
         raise HTTPException(status_code=403, detail="No autorizado")
+    
