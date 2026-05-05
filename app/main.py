@@ -28,9 +28,9 @@ app.add_middleware(
 Base.metadata.create_all(bind=engine)
 
 # 📍 ubicación empresa (TU TIENDA)
-LAT_EMPRESA = -33.43943
-LNG_EMPRESA = -70.648964
-DISTANCIA_MAX_METROS = 200
+LAT_EMPRESA = -33.44144144144144
+LNG_EMPRESA = -70.65131659585872
+DISTANCIA_MAX_METROS = 400
 
 
 # ✅ conexión BD
