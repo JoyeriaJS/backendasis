@@ -73,7 +73,7 @@ def login(data: dict, db: Session = Depends(get_db)):
 @app.post("/marcar")
 def marcar(data: dict, db: Session = Depends(get_db)):
 
-    # ✅ validar datos
+    # ✅ validar datos básicos
     if "user_id" not in data:
         return {"error": "Falta user_id"}
 
@@ -83,6 +83,15 @@ def marcar(data: dict, db: Session = Depends(get_db)):
     user_id = data["user_id"]
     lat = data["lat"]
     lng = data["lng"]
+
+    # 🧠 NUEVO: validar precisión GPS
+    accuracy = data.get("accuracy", 9999)
+
+    if accuracy > 30:
+        return {
+            "error": "GPS impreciso, intenta nuevamente",
+            "accuracy": accuracy
+        }
 
     # 📍 calcular distancia
     distancia = calcular_distancia_metros(lat, lng, LAT_EMPRESA, LNG_EMPRESA)
@@ -138,7 +147,8 @@ def marcar(data: dict, db: Session = Depends(get_db)):
     return {
         "message": f"{tipo.replace('_', ' ').capitalize()} registrada",
         "tipo": tipo,
-        "distancia_metros": round(distancia, 2)
+        "distancia_metros": round(distancia, 2),
+        "accuracy": accuracy  # 👈 útil para debug
     }
 
 @app.get("/estado/{user_id}")
