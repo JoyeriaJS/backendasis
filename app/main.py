@@ -30,7 +30,7 @@ Base.metadata.create_all(bind=engine)
 # 📍 ubicación empresa (TU TIENDA)
 LAT_EMPRESA = -33.43943
 LNG_EMPRESA = -70.648964
-DISTANCIA_MAX_METROS = 3
+DISTANCIA_MAX_METROS = 50
 
 
 # ✅ conexión BD
