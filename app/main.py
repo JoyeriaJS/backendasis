@@ -437,3 +437,45 @@ def firmar_documento(
     db.commit()
 
     return {"message": "Documento actualizado"}
+
+from fastapi import UploadFile, File, Form
+import shutil
+import os
+
+UPLOAD_DIR = "uploads"
+
+@app.post("/documentos/subir")
+def subir_documento(
+    user_id: int = Form(...),
+    tipo: str = Form(...),
+    periodo: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+
+    filename = f"{user_id}_{file.filename}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    url = f"https://fastapi-production-97a2.up.railway.app/{file_path}"
+
+    doc = Documento(
+        user_id=user_id,
+        tipo=tipo,
+        periodo=periodo,
+        archivo_url=url,
+        estado="pendiente"
+    )
+
+    db.add(doc)
+    db.commit()
+
+    return {"message": "Documento subido"}
+
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
