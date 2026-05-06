@@ -184,14 +184,32 @@ def asistencia(user_id: int, db: Session = Depends(get_db)):
         .order_by(Attendance.fecha.desc())\
         .all()
 
-@app.get("/historial/{user_id}")
-def historial(user_id: int, db: Session = Depends(get_db)):
-    registros = db.query(Attendance)\
-        .filter(Attendance.user_id == user_id)\
-        .order_by(Attendance.fecha.desc())\
-        .all()
+from fastapi import Request
 
-    return registros
+
+from fastapi import Request
+
+@app.get("/historial")
+def historial(
+    request: Request,
+    fecha_inicio: str = None,
+    fecha_fin: str = None,
+    db: Session = Depends(get_db)
+):
+    user_id = request.headers.get("user_id")
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="No autenticado")
+
+    query = db.query(Attendance).filter(Attendance.user_id == int(user_id))
+
+    if fecha_inicio:
+        query = query.filter(Attendance.fecha >= fecha_inicio)
+
+    if fecha_fin:
+        query = query.filter(Attendance.fecha <= fecha_fin)
+
+    return query.order_by(Attendance.fecha.desc()).all()
 
 from collections import defaultdict
 from datetime import datetime
