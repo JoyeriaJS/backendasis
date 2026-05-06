@@ -477,5 +477,7 @@ def subir_documento(
     return {"message": "Documento subido"}
 
 from fastapi.staticfiles import StaticFiles
+import os
 
+os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
