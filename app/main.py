@@ -184,32 +184,33 @@ def asistencia(user_id: int, db: Session = Depends(get_db)):
         .order_by(Attendance.fecha.desc())\
         .all()
 
-from fastapi import Request
 
 
+
 from fastapi import Request
+from datetime import datetime, timedelta
 
 @app.get("/historial")
 def historial(
-    request: Request,
+    user_id: int,
     fecha_inicio: str = None,
     fecha_fin: str = None,
     db: Session = Depends(get_db)
 ):
-    user_id = request.headers.get("user_id")
-
-    if not user_id:
-        raise HTTPException(status_code=401, detail="No autenticado")
-
-    query = db.query(Attendance).filter(Attendance.user_id == int(user_id))
+    query = db.query(Attendance).filter(Attendance.user_id == user_id)
 
     if fecha_inicio:
-        query = query.filter(Attendance.fecha >= fecha_inicio)
+        fi = datetime.strptime(fecha_inicio, "%Y-%m-%d")
+        query = query.filter(Attendance.fecha >= fi)
 
     if fecha_fin:
-        query = query.filter(Attendance.fecha <= fecha_fin)
+        ff = datetime.strptime(fecha_fin, "%Y-%m-%d")
+        ff = ff + timedelta(days=1)  # 🔥 CLAVE
+        query = query.filter(Attendance.fecha < ff)
 
-    return query.order_by(Attendance.fecha.desc()).all()
+    registros = query.order_by(Attendance.fecha.desc()).all()
+
+    return registros
 
 from collections import defaultdict
 from datetime import datetime
