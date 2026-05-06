@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from openpyxl import Workbook
 import os
 from fastapi import HTTPException
+from zoneinfo import ZoneInfo
 
 
 
@@ -136,7 +137,7 @@ def marcar(data: dict, db: Session = Depends(get_db)):
         user_id=user_id,
         lat=lat,
         lng=lng,
-        fecha=datetime.now(),
+        fecha=datetime.now(ZoneInfo("America/Santiago")),
         tipo=tipo
     )
 
