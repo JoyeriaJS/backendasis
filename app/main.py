@@ -419,20 +419,26 @@ def get_documentos(user_id: int, db: Session = Depends(get_db)):
 
     return docs
 
+from pydantic import BaseModel
+from typing import Optional
+
+class FirmaDocumento(BaseModel):
+    doc_id: int
+    aprobado: bool
+    observacion: Optional[str] = None
+
 @app.post("/documentos/firmar")
 def firmar_documento(
-    doc_id: int,
-    aprobado: bool,
-    observacion: str = None,
+    data: FirmaDocumento,
     db: Session = Depends(get_db)
 ):
-    doc = db.query(Documento).filter(Documento.id == doc_id).first()
+    doc = db.query(Documento).filter(Documento.id == data.doc_id).first()
 
     if not doc:
         return {"error": "Documento no encontrado"}
 
-    doc.estado = "firmado" if aprobado else "rechazado"
-    doc.observacion = observacion
+    doc.estado = "firmado" if data.aprobado else "rechazado"
+    doc.observacion = data.observacion
     doc.fecha_firma = datetime.now()
 
     db.commit()
