@@ -21,3 +21,19 @@ class Attendance(Base):
     lng = Column(Float)
     fecha = Column(DateTime, default=datetime.utcnow)
     tipo = Column(String)  # 👈 NUEVO
+
+class Documento(Base):
+    __tablename__ = "documentos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+    tipo = Column(String)  # liquidacion | contrato
+    archivo_url = Column(String)
+
+    periodo = Column(String)  # 2026-05
+
+    estado = Column(String, default="pendiente")  # pendiente | firmado | rechazado
+    observacion = Column(String, nullable=True)
+
+    fecha_firma = Column(DateTime, nullable=True)

@@ -5,7 +5,7 @@ from math import radians, cos, sin, asin, sqrt
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import SessionLocal, engine, Base
-from app.models import Attendance, User
+from app.models import Attendance, User, Documento
 from fastapi.responses import FileResponse
 from openpyxl import Workbook
 import os
@@ -406,3 +406,34 @@ def exportar_excel(
 def require_admin(user):
     if user.rol != "admin":
         raise HTTPException(status_code=403, detail="No autorizado")
+    
+
+@app.get("/documentos")
+def get_documentos(user_id: int, db: Session = Depends(get_db)):
+
+    docs = db.query(Documento)\
+        .filter(Documento.user_id == user_id)\
+        .order_by(Documento.id.desc())\
+        .all()
+
+    return docs
+
+@app.post("/documentos/firmar")
+def firmar_documento(
+    doc_id: int,
+    aprobado: bool,
+    observacion: str = None,
+    db: Session = Depends(get_db)
+):
+    doc = db.query(Documento).filter(Documento.id == doc_id).first()
+
+    if not doc:
+        return {"error": "Documento no encontrado"}
+
+    doc.estado = "firmado" if aprobado else "rechazado"
+    doc.observacion = observacion
+    doc.fecha_firma = datetime.now()
+
+    db.commit()
+
+    return {"message": "Documento actualizado"}
