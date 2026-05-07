@@ -469,14 +469,16 @@ async def subir_documento(
 
         nombre_unico = f"{uuid4()}_{file.filename}"
 
-        # 🔥 subir archivo
-        supabase.storage.from_("documentos").upload(
-            path=nombre_unico,
-            file=contenido,
-            file_options={
+        # 🔥 subir a Supabase
+        resultado = supabase.storage.from_("documentos").upload(
+            nombre_unico,
+            contenido,
+            {
                 "content-type": file.content_type
             }
         )
+
+        print(resultado)
 
         # 🔗 URL pública
         url = supabase.storage.from_("documentos").get_public_url(nombre_unico)
@@ -493,7 +495,7 @@ async def subir_documento(
         db.commit()
 
         return {
-            "message": "Documento subido",
+            "message": "Documento subido correctamente",
             "url": url
         }
 
@@ -503,7 +505,6 @@ async def subir_documento(
         return {
             "error": str(e)
         }
-
 from fastapi.staticfiles import StaticFiles
 import os
 
