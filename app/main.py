@@ -35,7 +35,6 @@ LAT_EMPRESA = -33.43943
 LNG_EMPRESA = -70.648964
 DISTANCIA_MAX_METROS = 100
 
-fecha_chile = datetime.now(ZoneInfo("America/Santiago")).replace(tzinfo=None)
 
 # ✅ conexión BD
 def get_db():
@@ -140,7 +139,7 @@ def marcar(data: dict, db: Session = Depends(get_db)):
         user_id=user_id,
         lat=lat,
         lng=lng,
-        fecha=fecha_chile,  
+        fecha=datetime.now(ZoneInfo("America/Santiago")).replace(tzinfo=None),
         tipo=tipo
     )
 
