@@ -11,7 +11,9 @@ from openpyxl import Workbook
 import os
 from fastapi import HTTPException
 from zoneinfo import ZoneInfo
-
+from supabase_client import supabase
+from uuid import uuid4
+from fastapi import UploadFile, File, Form
 
 app = FastAPI()
 
@@ -452,36 +454,42 @@ import os
 UPLOAD_DIR = "uploads"
 
 @app.post("/documentos/subir")
-def subir_documento(
+async def subir_documento(
+    file: UploadFile = File(...),
     user_id: int = Form(...),
     tipo: str = Form(...),
-    periodo: str = Form(...),
-    file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    if not os.path.exists(UPLOAD_DIR):
-        os.makedirs(UPLOAD_DIR)
 
-    filename = f"{user_id}_{file.filename}"
-    file_path = os.path.join(UPLOAD_DIR, filename)
+    contenido = await file.read()
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    nombre_unico = f"{uuid4()}_{file.filename}"
 
-    url = f"https://fastapi-production-97a2.up.railway.app/{file_path}"
+    # 🔥 subir a supabase
+    supabase.storage.from_("documentos").upload(
+        nombre_unico,
+        contenido,
+        {"content-type": file.content_type}
+    )
 
-    doc = Documento(
+    # 🔗 URL pública
+    url = supabase.storage.from_("documentos").get_public_url(nombre_unico)
+
+    nuevo = Documento(
         user_id=user_id,
+        nombre=file.filename,
         tipo=tipo,
-        periodo=periodo,
         archivo_url=url,
         estado="pendiente"
     )
 
-    db.add(doc)
+    db.add(nuevo)
     db.commit()
 
-    return {"message": "Documento subido"}
+    return {
+        "message": "Documento subido",
+        "url": url
+    }
 
 from fastapi.staticfiles import StaticFiles
 import os
