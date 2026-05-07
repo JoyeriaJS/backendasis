@@ -478,7 +478,7 @@ async def subir_documento(
             }
         )
 
-        # 🔗 obtener URL pública
+        # 🔗 URL pública
         url = supabase.storage.from_("documentos").get_public_url(nombre_unico)
 
         nuevo = Documento(
@@ -499,6 +499,7 @@ async def subir_documento(
 
     except Exception as e:
         print("ERROR SUBIENDO:", str(e))
+
         return {
             "error": str(e)
         }
