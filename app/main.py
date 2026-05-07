@@ -11,7 +11,7 @@ from openpyxl import Workbook
 import os
 from fastapi import HTTPException
 from zoneinfo import ZoneInfo
-from supabase_client import supabase
+from app.supabase_client import supabase
 from uuid import uuid4
 from fastapi import UploadFile, File, Form
 
