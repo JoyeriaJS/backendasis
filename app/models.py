@@ -27,6 +27,7 @@ class Documento(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    nombre = Column(String)  # 👈 AGREGAR ESTA LINEA
 
     tipo = Column(String)  # liquidacion | contrato
     archivo_url = Column(String)
