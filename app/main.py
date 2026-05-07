@@ -470,7 +470,7 @@ async def subir_documento(
         nombre_unico = f"{uuid4()}_{file.filename}"
 
         # 🔥 subir archivo
-        response = supabase.storage.from_("documentos").upload(
+        supabase.storage.from_("documentos").upload(
             path=nombre_unico,
             file=contenido,
             file_options={
