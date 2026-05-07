@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from uuid import uuid4
 from fastapi import UploadFile, File, Form
 
+
 app = FastAPI()
 
 # ✅ CORS
@@ -462,35 +463,45 @@ async def subir_documento(
     db: Session = Depends(get_db)
 ):
 
-    contenido = await file.read()
+    try:
 
-    nombre_unico = f"{uuid4()}_{file.filename}"
+        contenido = await file.read()
 
-    # 🔥 subir a supabase
-    supabase.storage.from_("documentos").upload(
-        nombre_unico,
-        contenido,
-        {"content-type": file.content_type}
-    )
+        nombre_unico = f"{uuid4()}_{file.filename}"
 
-    # 🔗 URL pública
-    url = supabase.storage.from_("documentos").get_public_url(nombre_unico)
+        # 🔥 subir archivo
+        response = supabase.storage.from_("documentos").upload(
+            path=nombre_unico,
+            file=contenido,
+            file_options={
+                "content-type": file.content_type
+            }
+        )
 
-    nuevo = Documento(
-        user_id=user_id,
-        nombre=file.filename,
-        tipo=tipo,
-        archivo_url=url,
-        estado="pendiente"
-    )
+        # 🔗 obtener URL pública
+        url = supabase.storage.from_("documentos").get_public_url(nombre_unico)
 
-    db.add(nuevo)
-    db.commit()
+        nuevo = Documento(
+            user_id=user_id,
+            nombre=file.filename,
+            tipo=tipo,
+            archivo_url=url,
+            estado="pendiente"
+        )
 
-    return {
-        "message": "Documento subido",
-        "url": url
-    }
+        db.add(nuevo)
+        db.commit()
+
+        return {
+            "message": "Documento subido",
+            "url": url
+        }
+
+    except Exception as e:
+        print("ERROR SUBIENDO:", str(e))
+        return {
+            "error": str(e)
+        }
 
 from fastapi.staticfiles import StaticFiles
 import os

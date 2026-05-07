@@ -1,4 +1,5 @@
 from supabase import create_client
+import os
 
 SUPABASE_URL = "https://fqfsazuxquxvwnnokozr.supabase.co/rest/v1/"
 SUPABASE_KEY = "0dtKfXQeTvuWgf3S"
