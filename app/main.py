@@ -11,7 +11,7 @@ from openpyxl import Workbook
 import os
 from fastapi import HTTPException
 from zoneinfo import ZoneInfo
-from app.supabase_client import supabase
+
 from uuid import uuid4
 from fastapi import UploadFile, File, Form
 
@@ -452,6 +452,7 @@ import shutil
 import os
 
 UPLOAD_DIR = "uploads"
+from app.supabase_client import supabase
 
 @app.post("/documentos/subir")
 async def subir_documento(

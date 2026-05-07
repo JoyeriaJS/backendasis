@@ -4,4 +4,4 @@ sqlalchemy
 psycopg2-binary
 openpyxl
 python-multipart
-supabase
+supabase-py
