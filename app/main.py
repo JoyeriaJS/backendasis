@@ -452,14 +452,14 @@ from fastapi import UploadFile, File, Form
 import shutil
 import os
 
-UPLOAD_DIR = "uploads"
+#UPLOAD_DIR = "uploads"
 from app.supabase_client import supabase
-
 @app.post("/documentos/subir")
 async def subir_documento(
     file: UploadFile = File(...),
     user_id: int = Form(...),
     tipo: str = Form(...),
+    periodo: str = Form(...),
     db: Session = Depends(get_db)
 ):
 
@@ -469,24 +469,26 @@ async def subir_documento(
 
         nombre_unico = f"{uuid4()}_{file.filename}"
 
-        # 🔥 subir a Supabase
+        # 🔥 SUBIR A SUPABASE
         resultado = supabase.storage.from_("documentos").upload(
-            nombre_unico,
-            contenido,
-            {
+            path=nombre_unico,
+            file=contenido,
+            file_options={
                 "content-type": file.content_type
             }
         )
 
+        print("SUPABASE RESULTADO:")
         print(resultado)
 
-        # 🔗 URL pública
+        # 🔗 URL PÚBLICA
         url = supabase.storage.from_("documentos").get_public_url(nombre_unico)
 
         nuevo = Documento(
             user_id=user_id,
             nombre=file.filename,
             tipo=tipo,
+            periodo=periodo,
             archivo_url=url,
             estado="pendiente"
         )
@@ -500,13 +502,16 @@ async def subir_documento(
         }
 
     except Exception as e:
+
         print("ERROR SUBIENDO:", str(e))
 
         return {
             "error": str(e)
         }
+
+
 from fastapi.staticfiles import StaticFiles
 import os
 
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+#os.makedirs("uploads", exist_ok=True)
+#app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
