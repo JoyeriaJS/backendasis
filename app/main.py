@@ -14,6 +14,13 @@ from zoneinfo import ZoneInfo
 
 from uuid import uuid4
 from fastapi import UploadFile, File, Form
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+from openpyxl.utils import get_column_letter
+from fastapi.responses import FileResponse
+from datetime import datetime, timedelta
+from collections import defaultdict
+import calendar
 
 
 app = FastAPI()
@@ -382,29 +389,174 @@ def exportar_excel(
     db: Session = Depends(get_db)
 ):
 
-    data = resumen(user_id, fecha_inicio, fecha_fin, db)
+    query = db.query(Attendance)
+
+    if user_id:
+        query = query.filter(Attendance.user_id == user_id)
+
+    if fecha_inicio:
+        fi = datetime.strptime(fecha_inicio, "%Y-%m-%d")
+        query = query.filter(Attendance.fecha >= fi)
+
+    if fecha_fin:
+        ff = datetime.strptime(fecha_fin, "%Y-%m-%d") + timedelta(days=1)
+        query = query.filter(Attendance.fecha < ff)
+
+    registros = query.order_by(Attendance.fecha.asc()).all()
+
+    users = {u.id: u.username for u in db.query(User).all()}
+
+    agrupado = defaultdict(lambda: defaultdict(list))
+
+    for r in registros:
+        agrupado[r.user_id][r.fecha.date()].append(r)
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Resumen"
+    ws.title = "Reporte RRHH"
 
-    ws.append(["Usuario", "Horas", "Atrasos", "Retiros"])
+    headers = [
+        "Usuario",
+        "Días trabajados",
+        "Horas Totales",
+        "Horas Promedio",
+        "Atrasos",
+        "Retiros Anticipados",
+        "% Asistencia",
+        "Horas Colación",
+        "Horas Extras",
+        "Días Incompletos"
+    ]
 
-    for r in data:
+    ws.append(headers)
+
+    # estilos
+    fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = fill
+
+    for uid, dias in agrupado.items():
+
+        atrasos = 0
+        retiros = 0
+        horas_totales = 0
+        horas_colacion_total = 0
+        horas_extras = 0
+        incompletos = 0
+        dias_trabajados = 0
+
+        for fecha, registros_dia in dias.items():
+
+            registros_dia.sort(key=lambda x: x.fecha)
+
+            entrada = None
+            salida = None
+            salida_colacion = None
+            entrada_colacion = None
+
+            for r in registros_dia:
+
+                if r.tipo == "entrada":
+                    entrada = r.fecha
+
+                    # atraso después 10 AM
+                    if r.fecha.hour >= 10:
+                        atrasos += 1
+
+                elif r.tipo == "salida":
+                    salida = r.fecha
+
+                    if r.fecha.hour < 18:
+                        retiros += 1
+
+                elif r.tipo == "salida_colacion":
+                    salida_colacion = r.fecha
+
+                elif r.tipo == "entrada_colacion":
+                    entrada_colacion = r.fecha
+
+            if entrada and salida:
+
+                dias_trabajados += 1
+
+                total = (salida - entrada).total_seconds()
+
+                colacion_seg = 0
+
+                if salida_colacion and entrada_colacion:
+                    colacion_seg = (
+                        entrada_colacion - salida_colacion
+                    ).total_seconds()
+
+                    total -= colacion_seg
+
+                horas_totales += total
+                horas_colacion_total += colacion_seg
+
+                # horas extra > 9 horas
+                if total > (9 * 3600):
+                    horas_extras += (total - (9 * 3600))
+
+            else:
+                incompletos += 1
+
+        # promedio
+        promedio = (
+            horas_totales / dias_trabajados
+            if dias_trabajados > 0 else 0
+        )
+
+        # calcular días laborales del rango
+        dias_laborales = 22
+
+        asistencia = (
+            (dias_trabajados / dias_laborales) * 100
+            if dias_laborales > 0 else 0
+        )
+
+        def format_horas(segundos):
+            horas = int(segundos // 3600)
+            minutos = int((segundos % 3600) // 60)
+            return f"{horas}h {minutos}m"
+
         ws.append([
-            r["user"],
-            r["horas"],
-            r["atrasos"],
-            r["retiros"]
+            users.get(uid, f"User {uid}"),
+            dias_trabajados,
+            format_horas(horas_totales),
+            format_horas(promedio),
+            atrasos,
+            retiros,
+            f"{asistencia:.1f}%",
+            format_horas(horas_colacion_total),
+            format_horas(horas_extras),
+            incompletos
         ])
 
-    file_path = "reporte_asistencia.xlsx"
+    # ajustar ancho columnas
+    for col in ws.columns:
+        max_length = 0
+        column = get_column_letter(col[0].column)
+
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+
+        adjusted_width = max_length + 5
+        ws.column_dimensions[column].width = adjusted_width
+
+    file_path = "reporte_rrhh.xlsx"
+
     wb.save(file_path)
 
     return FileResponse(
         path=file_path,
-        filename="reporte_asistencia.xlsx",
-        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        filename="reporte_rrhh.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 def require_admin(user):
     if user.rol != "admin":
