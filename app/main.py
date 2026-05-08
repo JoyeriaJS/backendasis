@@ -600,28 +600,57 @@ def firmar_documento(
     return {"message": "Documento actualizado"}
 
 @app.get("/admin/documentos")
-def admin_documentos(db: Session = Depends(get_db)):
+def admin_documentos(
+    user_id: int = Query(None),
+    estado: str = Query(None),
+    fecha_inicio: str = Query(None),
+    fecha_fin: str = Query(None),
+    orden: str = Query("desc"),
+    db: Session = Depends(get_db)
+):
 
-    documentos = db.query(Documento).all()
+    query = db.query(Documento, User)\
+        .join(User, Documento.user_id == User.id)
 
-    resultado = []
+    # 🔍 FILTRO USUARIO
+    if user_id:
+        query = query.filter(Documento.user_id == user_id)
 
-    for d in documentos:
+    # 🔍 FILTRO ESTADO
+    if estado:
+        query = query.filter(Documento.estado == estado)
 
-        user = db.query(User).filter(User.id == d.user_id).first()
+    # 🔍 FECHAS
+    if fecha_inicio:
+        fi = datetime.strptime(fecha_inicio, "%Y-%m-%d")
+        query = query.filter(Documento.fecha_firma >= fi)
 
-        resultado.append({
-            "id": d.id,
-            "usuario": user.username if user else "Desconocido",
-            "tipo": d.tipo,
-            "periodo": d.periodo,
-            "estado": d.estado,
-            "observacion": d.observacion,
-            "fecha_firma": d.fecha_firma,
-            "archivo_url": d.archivo_url
-        })
+    if fecha_fin:
+        ff = datetime.strptime(fecha_fin, "%Y-%m-%d")
+        ff = ff + timedelta(days=1)
+        query = query.filter(Documento.fecha_firma < ff)
 
-    return resultado
+    # 🔥 ORDEN
+    if orden == "asc":
+        query = query.order_by(Documento.id.asc())
+    else:
+        query = query.order_by(Documento.id.desc())
+
+    resultados = query.all()
+
+    return [
+        {
+            "id": doc.id,
+            "usuario": user.username,
+            "tipo": doc.tipo,
+            "periodo": doc.periodo,
+            "estado": doc.estado,
+            "archivo_url": doc.archivo_url,
+            "fecha_firma": doc.fecha_firma,
+            "observacion": doc.observacion
+        }
+        for doc, user in resultados
+    ]
 
 from fastapi import UploadFile, File, Form
 import shutil
