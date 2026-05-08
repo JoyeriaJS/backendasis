@@ -599,6 +599,30 @@ def firmar_documento(
 
     return {"message": "Documento actualizado"}
 
+@app.get("/admin/documentos")
+def admin_documentos(db: Session = Depends(get_db)):
+
+    documentos = db.query(Documento).all()
+
+    resultado = []
+
+    for d in documentos:
+
+        user = db.query(User).filter(User.id == d.user_id).first()
+
+        resultado.append({
+            "id": d.id,
+            "usuario": user.username if user else "Desconocido",
+            "tipo": d.tipo,
+            "periodo": d.periodo,
+            "estado": d.estado,
+            "observacion": d.observacion,
+            "fecha_firma": d.fecha_firma,
+            "archivo_url": d.archivo_url
+        })
+
+    return resultado
+
 from fastapi import UploadFile, File, Form
 import shutil
 import os
