@@ -554,10 +554,14 @@ def exportar_excel(
     wb.save(file_path)
 
     return FileResponse(
-        path=file_path,
-        filename="reporte_rrhh.xlsx",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    path=file_path,
+    filename="reporte_asistencia.xlsx",
+    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    headers={
+        "Content-Disposition":
+        "attachment; filename=reporte_asistencia.xlsx"
+    }
+)
 def require_admin(user):
     if user.rol != "admin":
         raise HTTPException(status_code=403, detail="No autorizado")
