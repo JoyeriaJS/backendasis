@@ -95,9 +95,26 @@ def marcar(data: dict, db: Session = Depends(get_db)):
         return {"error": "Faltan coordenadas"}
 
     user_id = data["user_id"]
+    codigo = data.get("codigo")
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        return {"error": "Usuario no encontrado"}
+
+    if not user.totp_secret:
+        return {"error": "Authenticator no configurado"}
+
+    totp = pyotp.TOTP(user.totp_secret)
+
+    if not totp.verify(codigo):
+
+        return {
+            "error": "Código Authenticator inválido"
+        }
     lat = data["lat"]
     lng = data["lng"]
-
+    
     # 👇 viene del frontend
     accuracy = data.get("accuracy", 999)
 
