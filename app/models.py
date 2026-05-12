@@ -10,6 +10,7 @@ class User(Base):
     username = Column(String, unique=True)
     password = Column(String)
     role = Column(String, default="user")  # "admin" o "user"
+    totp_secret = Column(String, nullable=True)
 
 
 class Attendance(Base):

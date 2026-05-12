@@ -21,6 +21,10 @@ from fastapi.responses import FileResponse
 from datetime import datetime, timedelta
 from collections import defaultdict
 import calendar
+import pyotp
+import qrcode
+from io import BytesIO
+from fastapi.responses import StreamingResponse
 
 
 app = FastAPI()
@@ -723,3 +727,69 @@ import os
 
 #os.makedirs("uploads", exist_ok=True)
 #app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+@app.get("/authenticator/setup/{user_id}")
+def setup_authenticator(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        return {"error": "Usuario no encontrado"}
+
+    # 🔥 generar secret si no existe
+    if not user.totp_secret:
+
+        user.totp_secret = pyotp.random_base32()
+
+        db.commit()
+
+    totp = pyotp.TOTP(user.totp_secret)
+
+    uri = totp.provisioning_uri(
+        name=user.username,
+        issuer_name="Joyeria Sebastian"
+    )
+
+    return {
+        "otpauth_url": uri
+    }
+
+@app.get("/authenticator/qr/{user_id}")
+def authenticator_qr(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        return {"error": "Usuario no encontrado"}
+
+    if not user.totp_secret:
+
+        user.totp_secret = pyotp.random_base32()
+
+        db.commit()
+
+    totp = pyotp.TOTP(user.totp_secret)
+
+    uri = totp.provisioning_uri(
+        name=user.username,
+        issuer_name="Joyeria Sebastian"
+    )
+
+    qr = qrcode.make(uri)
+
+    buffer = BytesIO()
+
+    qr.save(buffer, format="PNG")
+
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="image/png"
+    )
