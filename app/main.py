@@ -25,6 +25,7 @@ import pyotp
 import qrcode
 from io import BytesIO
 from fastapi.responses import StreamingResponse
+from app.mail_service import enviar_comprobante
 
 
 app = FastAPI()
@@ -629,6 +630,30 @@ def firmar_documento(
     doc.fecha_firma = datetime.now()
 
     db.commit()
+
+    # 🔥 BUSCAR USUARIO
+    usuario = db.query(User).filter(
+        User.id == doc.user_id
+    ).first()
+
+    # 🔥 ENVIAR CORREO
+    try:
+
+        enviar_comprobante(
+            destino=data.correo,
+            usuario=usuario.username,
+            documento=doc.tipo,
+            estado=doc.estado,
+            fecha=doc.fecha_firma.strftime("%d/%m/%Y %H:%M"),
+            observacion=doc.observacion
+        )
+
+        print("✅ CORREO ENVIADO")
+
+    except Exception as e:
+
+        print("❌ ERROR SMTP:")
+        print(str(e))
 
     return {
         "message": "Documento actualizado"
