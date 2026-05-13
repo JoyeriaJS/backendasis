@@ -4,10 +4,10 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 SMTP_SERVER = "smtp.hostinger.com"
-SMTP_PORT = 465
+SMTP_PORT = 587
 
 EMAIL = "rrhh@casteable.cl"
-PASSWORD = "Joyeria.sebastian_2025"
+PASSWORD = "TU_PASSWORD"
 
 
 def enviar_comprobante(
@@ -50,14 +50,19 @@ Sistema de Gestión Documental
 
         print("CONECTANDO")
 
-        server = smtplib.SMTP_SSL(
+        server = smtplib.SMTP(
             SMTP_SERVER,
             SMTP_PORT
         )
 
+        server.starttls()
+
         print("LOGIN")
 
-        server.login(EMAIL, PASSWORD)
+        server.login(
+            EMAIL,
+            PASSWORD
+        )
 
         print("ENVIANDO")
 
