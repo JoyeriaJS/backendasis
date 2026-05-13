@@ -605,6 +605,7 @@ class FirmaDocumento(BaseModel):
     doc_id: int
     aprobado: bool
     observacion: Optional[str] = None
+    correo: Optional[str] = None
 
 @app.post("/documentos/firmar")
 def firmar_documento(
