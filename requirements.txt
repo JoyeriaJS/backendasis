@@ -12,3 +12,4 @@ qrcode[pil]
 pillow
 email-validator==2.2.0
 resend
+pytz

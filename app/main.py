@@ -645,7 +645,9 @@ def firmar_documento(
             documento=doc.tipo,
             estado=doc.estado,
             fecha=doc.fecha_firma.strftime("%d/%m/%Y %H:%M"),
-            observacion=doc.observacion
+            observacion=doc.observacion,
+            archivo_url=doc.archivo_url,
+            nombre_archivo=doc.nombre
         )
 
         print("✅ CORREO ENVIADO")
