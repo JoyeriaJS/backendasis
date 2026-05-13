@@ -611,27 +611,27 @@ def firmar_documento(
     data: FirmaDocumento,
     db: Session = Depends(get_db)
 ):
-    doc = db.query(Documento).filter(Documento.id == data.doc_id).first()
+
+    doc = db.query(Documento).filter(
+        Documento.id == data.doc_id
+    ).first()
 
     if not doc:
         return {"error": "Documento no encontrado"}
 
     doc.estado = "firmado" if data.aprobado else "rechazado"
+
     doc.observacion = data.observacion
+
+    doc.correo = data.correo
+
     doc.fecha_firma = datetime.now()
 
     db.commit()
-    from app.mail_service import enviar_comprobante
-    enviar_comprobante(
-    destino=data.correo,
-    usuario=str(doc.user_id),
-    documento=doc.tipo,
-    estado=doc.estado,
-    fecha=str(doc.fecha_firma),
-    observacion=doc.observacion
-)
 
-    return {"message": "Documento actualizado"}
+    return {
+        "message": "Documento actualizado"
+    }
 
 @app.get("/admin/documentos")
 def admin_documentos(
