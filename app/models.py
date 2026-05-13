@@ -37,5 +37,5 @@ class Documento(Base):
 
     estado = Column(String, default="pendiente")  # pendiente | firmado | rechazado
     observacion = Column(String, nullable=True)
-    correo: str
     fecha_firma = Column(DateTime, nullable=True)
+    correo = Column(String, nullable=True)
