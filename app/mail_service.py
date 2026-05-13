@@ -7,7 +7,7 @@ SMTP_SERVER = "smtp.hostinger.com"
 SMTP_PORT = 465
 
 EMAIL = "rrhh@casteable.cl"
-PASSWORD = "TU_PASSWORD"
+PASSWORD = "g0sw-vu6y-abdi-r2ke"
 
 
 def enviar_comprobante(
