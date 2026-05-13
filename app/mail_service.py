@@ -1,13 +1,7 @@
-import smtplib
+import os
+import resend
 
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-
-SMTP_SERVER = "smtp.hostinger.com"
-SMTP_PORT = 587
-
-EMAIL = "rrhh@casteable.cl"
-PASSWORD = "TU_PASSWORD"
+resend.api_key = os.getenv("RESEND_API_KEY")
 
 
 def enviar_comprobante(
@@ -19,64 +13,30 @@ def enviar_comprobante(
     observacion=None
 ):
 
-    try:
+    html = f"""
+    <h2>Comprobante de documento</h2>
 
-        print("INICIANDO SMTP")
+    <p>Hola {usuario}</p>
 
-        asunto = f"Comprobante de documento {estado}"
+    <p>Tu documento fue procesado correctamente.</p>
 
-        body = f"""
-Hola {usuario}
+    <ul>
+        <li><strong>Documento:</strong> {documento}</li>
+        <li><strong>Estado:</strong> {estado}</li>
+        <li><strong>Fecha:</strong> {fecha}</li>
+    </ul>
 
-Tu documento fue procesado.
+    <p>
+        <strong>Observación:</strong><br>
+        {observacion or 'Sin observación'}
+    </p>
+    """
 
-Documento: {documento}
-Estado: {estado}
-Fecha: {fecha}
+    params = {
+        "from": "RRHH <onboarding@resend.dev>",
+        "to": [destino],
+        "subject": f"Documento {estado}",
+        "html": html
+    }
 
-Observación:
-{observacion or 'Sin observación'}
-
-Sistema de Gestión Documental
-"""
-
-        mensaje = MIMEMultipart()
-
-        mensaje["From"] = EMAIL
-        mensaje["To"] = destino
-        mensaje["Subject"] = asunto
-
-        mensaje.attach(MIMEText(body, "plain"))
-
-        print("CONECTANDO")
-
-        server = smtplib.SMTP(
-            SMTP_SERVER,
-            SMTP_PORT
-        )
-
-        server.starttls()
-
-        print("LOGIN")
-
-        server.login(
-            EMAIL,
-            PASSWORD
-        )
-
-        print("ENVIANDO")
-
-        server.sendmail(
-            EMAIL,
-            destino,
-            mensaje.as_string()
-        )
-
-        server.quit()
-
-        print("CORREO ENVIADO")
-
-    except Exception as e:
-
-        print("ERROR SMTP:")
-        print(str(e))
+    resend.Emails.send(params)
