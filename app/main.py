@@ -694,11 +694,16 @@ async def subir_documento(
 
     try:
 
+        # 🔥 VALIDACIÓN PDF
+        if file.content_type != "application/pdf":
+            return {
+                "error": "Solo se permiten archivos PDF"
+            }
+
         contenido = await file.read()
 
         nombre_unico = f"{uuid4()}_{file.filename}"
 
-        # 🔥 SUBIR A SUPABASE
         resultado = supabase.storage.from_("documentos").upload(
             path=nombre_unico,
             file=contenido,
@@ -707,15 +712,10 @@ async def subir_documento(
             }
         )
 
-        print("SUPABASE RESULTADO:")
-        print(resultado)
-
-        # 🔗 URL PÚBLICA
         url = supabase.storage.from_("documentos").get_public_url(nombre_unico)
 
         nuevo = Documento(
             user_id=user_id,
-            nombre=file.filename,
             tipo=tipo,
             periodo=periodo,
             archivo_url=url,
@@ -731,12 +731,8 @@ async def subir_documento(
         }
 
     except Exception as e:
-
         print("ERROR SUBIENDO:", str(e))
-
-        return {
-            "error": str(e)
-        }
+        return {"error": str(e)}
 
 
 from fastapi.staticfiles import StaticFiles
