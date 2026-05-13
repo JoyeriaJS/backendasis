@@ -7,7 +7,8 @@ SMTP_SERVER = "smtp.hostinger.com"
 SMTP_PORT = 465
 
 EMAIL = "rrhh@casteable.cl"
-PASSWORD = "Joyeria.sebastian_2025"
+PASSWORD = "TU_PASSWORD"
+
 
 def enviar_comprobante(
     destino,
@@ -18,9 +19,13 @@ def enviar_comprobante(
     observacion=None
 ):
 
-    asunto = f"Comprobante de documento {estado}"
+    try:
 
-    body = f"""
+        print("INICIANDO SMTP")
+
+        asunto = f"Comprobante de documento {estado}"
+
+        body = f"""
 Hola {usuario}
 
 Tu documento fue procesado.
@@ -35,22 +40,38 @@ Observación:
 Sistema de Gestión Documental
 """
 
-    mensaje = MIMEMultipart()
+        mensaje = MIMEMultipart()
 
-    mensaje["From"] = EMAIL
-    mensaje["To"] = destino
-    mensaje["Subject"] = asunto
+        mensaje["From"] = EMAIL
+        mensaje["To"] = destino
+        mensaje["Subject"] = asunto
 
-    mensaje.attach(MIMEText(body, "plain"))
+        mensaje.attach(MIMEText(body, "plain"))
 
-    server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+        print("CONECTANDO")
 
-    server.login(EMAIL, PASSWORD)
+        server = smtplib.SMTP_SSL(
+            SMTP_SERVER,
+            SMTP_PORT
+        )
 
-    server.sendmail(
-        EMAIL,
-        destino,
-        mensaje.as_string()
-    )
+        print("LOGIN")
 
-    server.quit()
+        server.login(EMAIL, PASSWORD)
+
+        print("ENVIANDO")
+
+        server.sendmail(
+            EMAIL,
+            destino,
+            mensaje.as_string()
+        )
+
+        server.quit()
+
+        print("CORREO ENVIADO")
+
+    except Exception as e:
+
+        print("ERROR SMTP:")
+        print(str(e))
