@@ -3,7 +3,6 @@ import resend
 
 resend.api_key = os.getenv("RESEND_API_KEY")
 
-
 def enviar_comprobante(
     destino,
     usuario,
@@ -18,7 +17,7 @@ def enviar_comprobante(
 
     <p>Hola {usuario}</p>
 
-    <p>Tu documento fue procesado correctamente.</p>
+    <p>Tu documento fue procesado.</p>
 
     <ul>
         <li><strong>Documento:</strong> {documento}</li>
@@ -32,9 +31,15 @@ def enviar_comprobante(
     </p>
     """
 
+    destinatarios = [destino]
+
+    # 🔥 ALERTA RRHH SI RECHAZA
+    if estado == "rechazado":
+        destinatarios.append("casteable.js@gmail.com")
+
     params = {
         "from": "RRHH <rrhh@casteable.cl>",
-        "to": [destino],
+        "to": destinatarios,
         "subject": f"Documento {estado}",
         "html": html
     }
