@@ -638,13 +638,17 @@ def firmar_documento(
 
     # 🔥 ENVIAR CORREO
     try:
+        from zoneinfo import ZoneInfo
+        fecha_chile = datetime.now(
+            ZoneInfo("America/Santiago")
+        ).strftime("%d/%m/%Y %H:%M")
 
         enviar_comprobante(
             destino=data.correo,
             usuario=usuario.username,
             documento=doc.tipo,
             estado=doc.estado,
-            fecha=doc.fecha_firma.strftime("%d/%m/%Y %H:%M"),
+            fecha=fecha_chile,
             observacion=doc.observacion,
             archivo_url=doc.archivo_url,
             nombre_archivo=doc.nombre
