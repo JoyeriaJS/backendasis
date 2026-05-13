@@ -621,6 +621,15 @@ def firmar_documento(
     doc.fecha_firma = datetime.now()
 
     db.commit()
+    from app.mail_service import enviar_comprobante
+    enviar_comprobante(
+    destino=data.correo,
+    usuario=str(doc.user_id),
+    documento=doc.tipo,
+    estado=doc.estado,
+    fecha=str(doc.fecha_firma),
+    observacion=doc.observacion
+)
 
     return {"message": "Documento actualizado"}
 

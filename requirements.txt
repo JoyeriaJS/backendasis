@@ -10,3 +10,4 @@ gotrue==1.3.0
 pyotp
 qrcode[pil]
 pillow
+email-validator==2.2.0
