@@ -33,7 +33,7 @@ def enviar_comprobante(
     """
 
     params = {
-        "from": "RRHH <onboarding@resend.dev>",
+        "from": "RRHH <rrhh@casteable.cl>",
         "to": [destino],
         "subject": f"Documento {estado}",
         "html": html
