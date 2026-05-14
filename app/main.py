@@ -26,6 +26,7 @@ import qrcode
 from io import BytesIO
 from fastapi.responses import StreamingResponse
 from app.mail_service import enviar_comprobante
+from app.models import AuditLog
 
 
 app = FastAPI()
@@ -1067,3 +1068,27 @@ def authenticator_qr(
         buffer,
         media_type="image/png"
     )
+
+@app.get("/audit-logs")
+def obtener_auditoria(
+    db: Session = Depends(get_db)
+):
+
+    logs = (
+        db.query(AuditLog)
+        .order_by(AuditLog.fecha.desc())
+        .all()
+    )
+
+    return [
+        {
+            "id": l.id,
+            "user_id": l.user_id,
+            "username": l.username,
+            "accion": l.accion,
+            "detalle": l.detalle,
+            "fecha": l.fecha.strftime("%d-%m-%Y %H:%M"),
+            "ip": l.ip
+        }
+        for l in logs
+    ]
