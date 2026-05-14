@@ -85,105 +85,283 @@ def login(data: dict, db: Session = Depends(get_db)):
 
 
 # 📍 MARCAR ASISTENCIA REAL
-@app.post("/marcar")
-def marcar(data: dict, db: Session = Depends(get_db)):
+from fastapi.responses import FileResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+from openpyxl.utils import get_column_letter
 
-    # ✅ validar datos
-    if "user_id" not in data:
-        return {"error": "Falta user_id"}
+from collections import defaultdict
+from datetime import datetime, timedelta
 
-    if "lat" not in data or "lng" not in data:
-        return {"error": "Faltan coordenadas"}
+import os
 
-    user_id = data["user_id"]
-    codigo = data.get("codigo")
 
-    user = db.query(User).filter(User.id == user_id).first()
+@app.get("/exportar-excel")
+def exportar_excel(
+    user_id: int = Query(None),
+    fecha_inicio: str = Query(None),
+    fecha_fin: str = Query(None),
+    db: Session = Depends(get_db)
+):
 
-    if not user:
-        return {"error": "Usuario no encontrado"}
+    query = db.query(Attendance)
 
-    if not user.totp_secret:
-        return {"error": "Authenticator no configurado"}
-
-    totp = pyotp.TOTP(user.totp_secret)
-
-    if not totp.verify(codigo):
-
-        return {
-            "error": "Código Authenticator inválido"
-        }
-    lat = data["lat"]
-    lng = data["lng"]
-    
-    # 👇 viene del frontend
-    accuracy = data.get("accuracy", 999)
-
-    # 📍 calcular distancia
-    distancia = calcular_distancia_metros(lat, lng, LAT_EMPRESA, LNG_EMPRESA)
-
-    # 🔥 SOLUCIÓN REAL PARA INTERIOR (galería, piso 9, etc)
-    if accuracy >= 1000:
-        # GPS muy malo → permitir pero con límite razonable
-        margen = 600   # 👈 ajusta entre 400 y 800 según pruebas
-    else:
-        # GPS decente
-        margen = DISTANCIA_MAX_METROS + (accuracy * 0.7)
-
-    # 🚫 validación final (UNA sola vez)
-    if distancia > margen:
-        return {
-            "error": "Fuera de la zona permitida",
-            "distancia_metros": round(distancia, 2),
-            "accuracy": accuracy,
-            "margen": margen
-        }
-
-    # 📅 registros de HOY
-    hoy = datetime.now(ZoneInfo("America/Santiago")).date()
-
-    registros_hoy = (
-        db.query(Attendance)
-        .filter(
-            Attendance.user_id == user_id,
-            Attendance.fecha >= datetime.combine(hoy, datetime.min.time())
+    # 🔍 FILTROS
+    if user_id:
+        query = query.filter(
+            Attendance.user_id == user_id
         )
+
+    if fecha_inicio:
+        fi = datetime.strptime(
+            fecha_inicio,
+            "%Y-%m-%d"
+        )
+
+        query = query.filter(
+            Attendance.fecha >= fi
+        )
+
+    if fecha_fin:
+        ff = datetime.strptime(
+            fecha_fin,
+            "%Y-%m-%d"
+        ) + timedelta(days=1)
+
+        query = query.filter(
+            Attendance.fecha < ff
+        )
+
+    registros = (
+        query
         .order_by(Attendance.fecha.asc())
         .all()
     )
 
-    if len(registros_hoy) >= 4:
-        return {"error": "Ya completaste tus 4 marcajes del día"}
+    users = {
+        u.id: u.username
+        for u in db.query(User).all()
+    }
 
-    tipos = [
-        "entrada",
-        "salida_colacion",
-        "entrada_colacion",
-        "salida"
-    ]
-
-    tipo = tipos[len(registros_hoy)]
-
-    nuevo = Attendance(
-        user_id=user_id,
-        username=user.username,
-        lat=lat,
-        lng=lng,
-        fecha=datetime.now(ZoneInfo("America/Santiago")).replace(tzinfo=None),
-        tipo=tipo
+    # 📦 AGRUPAR POR USUARIO Y FECHA
+    agrupado = defaultdict(
+        lambda: defaultdict(list)
     )
 
-    db.add(nuevo)
-    db.commit()
-    db.refresh(nuevo)
+    for r in registros:
 
-    return {
-        "message": f"{tipo.replace('_', ' ').capitalize()} registrada",
-        "tipo": tipo,
-        "distancia_metros": round(distancia, 2),
-        "accuracy": accuracy,
-        "margen": margen
-    }
+        fecha_dia = r.fecha.date()
+
+        agrupado[r.user_id][fecha_dia].append(r)
+
+    # 📘 EXCEL
+    wb = Workbook()
+    ws = wb.active
+
+    ws.title = "Reporte RRHH"
+
+    headers = [
+        "Usuario",
+        "Fecha",
+
+        "Entrada",
+        "Salida Colación",
+        "Entrada Colación",
+        "Salida",
+
+        "Horas Trabajadas",
+
+        "Atraso",
+        "Retiro Anticipado",
+        "Incompleto"
+    ]
+
+    ws.append(headers)
+
+    # 🎨 ESTILOS
+    fill = PatternFill(
+        start_color="1F4E78",
+        end_color="1F4E78",
+        fill_type="solid"
+    )
+
+    for cell in ws[1]:
+        cell.font = Font(
+            bold=True,
+            color="FFFFFF"
+        )
+
+        cell.fill = fill
+
+    # 📊 RECORRER
+    for uid, dias in agrupado.items():
+
+        for fecha, registros_dia in dias.items():
+
+            registros_dia.sort(
+                key=lambda x: x.fecha
+            )
+
+            entrada = None
+            salida_colacion = None
+            entrada_colacion = None
+            salida = None
+
+            for r in registros_dia:
+
+                if r.tipo == "entrada":
+                    entrada = r.fecha
+
+                elif r.tipo == "salida_colacion":
+                    salida_colacion = r.fecha
+
+                elif r.tipo == "entrada_colacion":
+                    entrada_colacion = r.fecha
+
+                elif r.tipo == "salida":
+                    salida = r.fecha
+
+            # ⏱️ HORAS
+            total_horas_dia = 0
+
+            if entrada and salida:
+
+                total_horas_dia = (
+                    salida - entrada
+                ).total_seconds()
+
+                # 🍽️ DESCONTAR COLACIÓN
+                if (
+                    salida_colacion
+                    and entrada_colacion
+                ):
+
+                    colacion = (
+                        entrada_colacion
+                        - salida_colacion
+                    ).total_seconds()
+
+                    total_horas_dia -= colacion
+
+            # 🔥 FORMATO HORAS
+            def format_horas(segundos):
+
+                horas = int(segundos // 3600)
+
+                minutos = int(
+                    (segundos % 3600) // 60
+                )
+
+                return f"{horas}h {minutos}m"
+
+            # 🚨 ATRASOS
+            atrasado = "NO"
+
+            if entrada:
+                if entrada.hour >= 10:
+                    atrasado = "SI"
+
+            # 🚨 RETIRO
+            retiro_anticipado = "NO"
+
+            if salida:
+                if salida.hour < 18:
+                    retiro_anticipado = "SI"
+
+            # 🚨 INCOMPLETO
+            incompleto = "NO"
+
+            if not (
+                entrada
+                and salida
+            ):
+                incompleto = "SI"
+
+            # 🕒 HORAS DIRECTAS
+            entrada_hora = (
+                entrada.strftime("%H:%M")
+                if entrada else "-"
+            )
+
+            salida_colacion_hora = (
+                salida_colacion.strftime("%H:%M")
+                if salida_colacion else "-"
+            )
+
+            entrada_colacion_hora = (
+                entrada_colacion.strftime("%H:%M")
+                if entrada_colacion else "-"
+            )
+
+            salida_hora = (
+                salida.strftime("%H:%M")
+                if salida else "-"
+            )
+
+            # 📝 FILA
+            ws.append([
+                users.get(uid, f"User {uid}"),
+                str(fecha),
+
+                entrada_hora,
+                salida_colacion_hora,
+                entrada_colacion_hora,
+                salida_hora,
+
+                format_horas(total_horas_dia),
+
+                atrasado,
+                retiro_anticipado,
+                incompleto
+            ])
+
+    # 📏 AJUSTAR COLUMNAS
+    for col in ws.columns:
+
+        max_length = 0
+
+        column = get_column_letter(
+            col[0].column
+        )
+
+        for cell in col:
+
+            try:
+                if len(str(cell.value)) > max_length:
+
+                    max_length = len(
+                        str(cell.value)
+                    )
+
+            except:
+                pass
+
+        adjusted_width = max_length + 5
+
+        ws.column_dimensions[
+            column
+        ].width = adjusted_width
+
+    # 💾 GUARDAR
+    file_path = "reporte_rrhh.xlsx"
+
+    wb.save(file_path)
+
+    # 📥 DESCARGA
+    return FileResponse(
+        path=file_path,
+
+        filename="reporte_asistencia.xlsx",
+
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+
+        headers={
+            "Content-Disposition":
+            "attachment; filename=reporte_asistencia.xlsx"
+        }
+    )
 
 @app.get("/estado/{user_id}")
 def estado(user_id: int, db: Session = Depends(get_db)):
