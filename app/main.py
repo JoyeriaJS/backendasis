@@ -31,24 +31,6 @@ from app.models import AuditLog
 
 app = FastAPI()
 
-# ✅ CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ✅ crear tablas
-Base.metadata.create_all(bind=engine)
-
-# 📍 ubicación empresa (TU TIENDA)
-LAT_EMPRESA = -33.43943
-LNG_EMPRESA = -70.648964
-DISTANCIA_MAX_METROS = 100
-
-
 from zoneinfo import ZoneInfo
 from datetime import datetime
 
@@ -83,6 +65,26 @@ def get_db():
     finally:
         db.close()
 
+# ✅ CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ✅ crear tablas
+Base.metadata.create_all(bind=engine)
+
+# 📍 ubicación empresa (TU TIENDA)
+LAT_EMPRESA = -33.43943
+LNG_EMPRESA = -70.648964
+DISTANCIA_MAX_METROS = 100
+
+
+
+
 
 # ✅ fórmula distancia (metros)
 def calcular_distancia_metros(lat1, lon1, lat2, lon2):
@@ -98,11 +100,20 @@ def calcular_distancia_metros(lat1, lon1, lat2, lon2):
 
 # 🔐 LOGIN
 @app.post("/login")
+
 def login(data: dict, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data["username"]).first()
 
     if not user or user.password != data["password"]:
         return {"error": "Credenciales inválidas"}
+    registrar_auditoria(
+    db=db,
+    user_id=user.id,
+    username=user.username,
+    accion="Inicio de sesión",
+    detalle="Usuario inició sesión",
+    ip=""
+)
 
     return {
         "user_id": user.id,
@@ -207,8 +218,9 @@ def marcar(data: dict, db: Session = Depends(get_db)):
     db=db,
     user_id=user.id,
     username=user.username,
-    accion="MARCA_ASISTENCIA",
-    detalle=f"{tipo} registrada",
+    accion="Marcaje",
+    detalle=f"Marcó {tipo}",
+    ip=""
 )
 
     return {
