@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Query
 from datetime import datetime, date
 from sqlalchemy.orm import Session
 from math import radians, cos, sin, asin, sqrt
