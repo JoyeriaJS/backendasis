@@ -5,7 +5,7 @@ from math import radians, cos, sin, asin, sqrt
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import SessionLocal, engine, Base
-from app.models import Attendance, User, Documento
+from app.models import Attendance, User, Documento, AuditLog
 from fastapi.responses import FileResponse
 from openpyxl import Workbook
 import os
@@ -47,6 +47,32 @@ LAT_EMPRESA = -33.43943
 LNG_EMPRESA = -70.648964
 DISTANCIA_MAX_METROS = 100
 
+
+from zoneinfo import ZoneInfo
+from datetime import datetime
+
+def registrar_auditoria(
+    db,
+    user_id,
+    username,
+    accion,
+    detalle,
+    ip=None
+):
+
+    log = AuditLog(
+        user_id=user_id,
+        username=username,
+        accion=accion,
+        detalle=detalle,
+        fecha=datetime.now(
+            ZoneInfo("America/Santiago")
+        ).replace(tzinfo=None),
+        ip=ip
+    )
+
+    db.add(log)
+    db.commit()
 
 # ✅ conexión BD
 def get_db():
@@ -176,6 +202,13 @@ def marcar(data: dict, db: Session = Depends(get_db)):
     db.add(nuevo)
     db.commit()
     db.refresh(nuevo)
+    registrar_auditoria(
+    db=db,
+    user_id=user.id,
+    username=user.username,
+    accion="MARCA_ASISTENCIA",
+    detalle=f"{tipo} registrada",
+)
 
     return {
         "message": f"{tipo.replace('_', ' ').capitalize()} registrada",
@@ -806,6 +839,17 @@ def firmar_documento(
     doc.fecha_firma = datetime.now()
 
     db.commit()
+    user = db.query(User).filter(
+        User.id == doc.user_id
+    ).first()
+
+    registrar_auditoria(
+        db=db,
+        user_id=user.id,
+        username=user.username,
+        accion="DOCUMENTO",
+        detalle=f"Documento {doc.nombre} {doc.estado}"
+    )
 
     # 🔥 BUSCAR USUARIO
     usuario = db.query(User).filter(
