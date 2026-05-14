@@ -31,16 +31,15 @@ from app.models import AuditLog
 
 app = FastAPI()
 
-from zoneinfo import ZoneInfo
-from datetime import datetime
+
 
 def registrar_auditoria(
     db,
     user_id,
     username,
     accion,
-    detalle,
-    ip=None
+    detalle="",
+    ip=""
 ):
 
     log = AuditLog(
@@ -48,22 +47,11 @@ def registrar_auditoria(
         username=username,
         accion=accion,
         detalle=detalle,
-        fecha=datetime.now(
-            ZoneInfo("America/Santiago")
-        ).replace(tzinfo=None),
+        fecha=datetime.now(),
         ip=ip
     )
 
     db.add(log)
-    db.commit()
-
-# ✅ conexión BD
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # ✅ CORS
 app.add_middleware(
