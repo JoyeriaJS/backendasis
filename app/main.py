@@ -402,14 +402,16 @@ def siguiente(user_id: int, db: Session = Depends(get_db)):
 
 from fastapi.responses import FileResponse
 from openpyxl import Workbook
-from openpyxl.styles import PatternFill, Font
+from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from collections import defaultdict
+
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import os
+
 
 @app.get("/exportar-excel")
 def exportar_excel(
@@ -418,8 +420,6 @@ def exportar_excel(
     fecha_fin: str = Query(None),
     db: Session = Depends(get_db)
 ):
-
-    chile_tz = ZoneInfo("America/Santiago")
 
     query = db.query(Attendance)
 
@@ -435,7 +435,6 @@ def exportar_excel(
         query = query.filter(Attendance.fecha < ff)
 
     registros = query.order_by(
-        Attendance.user_id.asc(),
         Attendance.fecha.asc()
     ).all()
 
@@ -444,27 +443,9 @@ def exportar_excel(
         for u in db.query(User).all()
     }
 
-    # 🔥 AGRUPAR POR USUARIO + DÍA
-    agrupado = defaultdict(lambda: defaultdict(list))
-
-    for r in registros:
-
-        fecha_chile = (
-            r.fecha.replace(tzinfo=ZoneInfo("UTC"))
-            .astimezone(chile_tz)
-        )
-
-        agrupado[r.user_id][fecha_chile.date()].append({
-            "registro": r,
-            "fecha_chile": fecha_chile
-        })
-
     wb = Workbook()
 
-    # =========================================================
-    # 🔥 HOJA 1 — RESUMEN
-    # =========================================================
-
+    # 🔥 HOJA RESUMEN
     ws = wb.active
     ws.title = "Resumen RRHH"
 
@@ -496,13 +477,39 @@ def exportar_excel(
         )
         cell.fill = fill
 
-    # =========================================================
-    # 🔥 HOJA 2 — MARCAJES
-    # =========================================================
+    agrupado = defaultdict(
+        lambda: defaultdict(list)
+    )
 
-    ws2 = wb.create_sheet(title="Marcajes")
+    # 🔥 CONVERTIR TODO A HORA CHILE
+    for r in registros:
 
-    headers2 = [
+        fecha_chile = r.fecha.astimezone(
+            ZoneInfo("America/Santiago")
+        )
+
+        agrupado[r.user_id][fecha_chile.date()].append({
+            "tipo": r.tipo,
+            "fecha": fecha_chile
+        })
+
+    # 🔥 FORMATO HORAS
+    def format_horas(segundos):
+
+        horas = int(segundos // 3600)
+
+        minutos = int(
+            (segundos % 3600) // 60
+        )
+
+        return f"{horas}h {minutos}m"
+
+    # 🔥 HOJA DETALLE
+    ws_detalle = wb.create_sheet(
+        title="Marcajes"
+    )
+
+    detalle_headers = [
         "Usuario",
         "Fecha",
         "Entrada",
@@ -512,19 +519,16 @@ def exportar_excel(
         "Horas Trabajadas"
     ]
 
-    ws2.append(headers2)
+    ws_detalle.append(detalle_headers)
 
-    for cell in ws2[1]:
+    for cell in ws_detalle[1]:
         cell.font = Font(
             bold=True,
             color="FFFFFF"
         )
         cell.fill = fill
 
-    # =========================================================
-    # 🔥 RECORRER USUARIOS
-    # =========================================================
-
+    # 🔥 RESUMEN
     for uid, dias in agrupado.items():
 
         atrasos = 0
@@ -538,7 +542,7 @@ def exportar_excel(
         for fecha, registros_dia in dias.items():
 
             registros_dia.sort(
-                key=lambda x: x["fecha_chile"]
+                key=lambda x: x["fecha"]
             )
 
             entrada = None
@@ -546,86 +550,82 @@ def exportar_excel(
             salida_colacion = None
             entrada_colacion = None
 
-            # 🔥 BUSCAR MARCAS
-            for item in registros_dia:
+            for r in registros_dia:
 
-                r = item["registro"]
-                fecha_local = item["fecha_chile"]
+                if r["tipo"] == "entrada":
+                    entrada = r["fecha"]
 
-                if r.tipo == "entrada":
-                    entrada = fecha_local
-
-                    # atraso después de 10 AM
-                    if fecha_local.hour >= 10:
+                    if entrada.hour >= 10:
                         atrasos += 1
 
-                elif r.tipo == "salida":
-                    salida = fecha_local
+                elif r["tipo"] == "salida":
+                    salida = r["fecha"]
 
-                    # retiro antes 18 hrs
-                    if fecha_local.hour < 18:
+                    if salida.hour < 18:
                         retiros += 1
 
-                elif r.tipo == "salida_colacion":
-                    salida_colacion = fecha_local
+                elif r["tipo"] == "salida_colacion":
+                    salida_colacion = r["fecha"]
 
-                elif r.tipo == "entrada_colacion":
-                    entrada_colacion = fecha_local
+                elif r["tipo"] == "entrada_colacion":
+                    entrada_colacion = r["fecha"]
 
-            total_segundos = 0
+            horas_dia = 0
 
-            # 🔥 CALCULAR HORAS
             if entrada and salida:
 
                 dias_trabajados += 1
 
-                total_segundos = (
+                total = (
                     salida - entrada
                 ).total_seconds()
 
                 colacion_seg = 0
 
-                if salida_colacion and entrada_colacion:
+                if (
+                    salida_colacion and
+                    entrada_colacion
+                ):
 
                     colacion_seg = (
-                        entrada_colacion - salida_colacion
+                        entrada_colacion -
+                        salida_colacion
                     ).total_seconds()
 
-                    total_segundos -= colacion_seg
+                    total -= colacion_seg
 
-                horas_totales += total_segundos
+                horas_dia = total
+
+                horas_totales += total
                 horas_colacion_total += colacion_seg
 
-                # horas extra > 9 horas
-                if total_segundos > (9 * 3600):
+                if total > (9 * 3600):
 
                     horas_extras += (
-                        total_segundos - (9 * 3600)
+                        total - (9 * 3600)
                     )
 
             else:
                 incompletos += 1
 
-            # =================================================
-            # 🔥 INSERTAR MARCAJES EN EXCEL
-            # =================================================
-
-            def format_hora(dt):
-                return dt.strftime("%H:%M") if dt else "-"
-
-            def format_horas(segundos):
-                horas = int(segundos // 3600)
-                minutos = int((segundos % 3600) // 60)
-                return f"{horas}h {minutos}m"
-
-            ws2.append([
+            # 🔥 AGREGAR MARCAJES
+            ws_detalle.append([
                 users.get(uid, f"User {uid}"),
-                fecha.strftime("%d-%m-%Y"),
-                format_hora(entrada),
-                format_hora(salida_colacion),
-                format_hora(entrada_colacion),
-                format_hora(salida),
-                format_horas(total_segundos)
+                fecha.strftime("%Y-%m-%d"),
+
+                entrada.strftime("%H:%M")
+                if entrada else "-",
+
+                salida_colacion.strftime("%H:%M")
+                if salida_colacion else "-",
+
+                entrada_colacion.strftime("%H:%M")
+                if entrada_colacion else "-",
+
+                salida.strftime("%H:%M")
+                if salida else "-",
+
+                format_horas(horas_dia)
             ])
 
         promedio = (
@@ -633,22 +633,12 @@ def exportar_excel(
             if dias_trabajados > 0 else 0
         )
 
-        # 🔥 días laborales aproximados
         dias_laborales = 22
 
         asistencia = (
             (dias_trabajados / dias_laborales) * 100
             if dias_laborales > 0 else 0
         )
-
-        def format_horas(segundos):
-            horas = int(segundos // 3600)
-            minutos = int((segundos % 3600) // 60)
-            return f"{horas}h {minutos}m"
-
-        # =====================================================
-        # 🔥 INSERTAR RESUMEN
-        # =====================================================
 
         ws.append([
             users.get(uid, f"User {uid}"),
@@ -663,11 +653,8 @@ def exportar_excel(
             incompletos
         ])
 
-    # =========================================================
-    # 🔥 AUTO WIDTH
-    # =========================================================
-
-    for hoja in [ws, ws2]:
+    # 🔥 AUTO AJUSTE COLUMNAS
+    for hoja in [ws, ws_detalle]:
 
         for col in hoja.columns:
 
@@ -678,17 +665,18 @@ def exportar_excel(
             )
 
             for cell in col:
+
                 try:
                     if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
+                        max_length = len(
+                            str(cell.value)
+                        )
                 except:
                     pass
 
-            hoja.column_dimensions[column].width = max_length + 5
-
-    # =========================================================
-    # 🔥 GUARDAR
-    # =========================================================
+            hoja.column_dimensions[
+                column
+            ].width = max_length + 5
 
     file_path = "reporte_rrhh.xlsx"
 
