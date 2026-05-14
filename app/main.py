@@ -1087,9 +1087,10 @@ def obtener_auditoria(
 ):
 
     logs = (
-        db.query(AuditLog)
-        .order_by(AuditLog.fecha.desc())
-        .all()
+    db.query(AuditLog)
+    .order_by(AuditLog.fecha.desc())
+    .limit(100)
+    .all()
     )
 
     return [
