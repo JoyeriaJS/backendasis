@@ -402,6 +402,13 @@ def siguiente(user_id: int, db: Session = Depends(get_db)):
 
 from fastapi.responses import FileResponse
 from openpyxl import Workbook
+from openpyxl.styles import PatternFill, Font
+from openpyxl.utils import get_column_letter
+
+from collections import defaultdict
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 import os
 
 @app.get("/exportar-excel")
@@ -411,6 +418,8 @@ def exportar_excel(
     fecha_fin: str = Query(None),
     db: Session = Depends(get_db)
 ):
+
+    chile_tz = ZoneInfo("America/Santiago")
 
     query = db.query(Attendance)
 
@@ -425,18 +434,39 @@ def exportar_excel(
         ff = datetime.strptime(fecha_fin, "%Y-%m-%d") + timedelta(days=1)
         query = query.filter(Attendance.fecha < ff)
 
-    registros = query.order_by(Attendance.fecha.asc()).all()
+    registros = query.order_by(
+        Attendance.user_id.asc(),
+        Attendance.fecha.asc()
+    ).all()
 
-    users = {u.id: u.username for u in db.query(User).all()}
+    users = {
+        u.id: u.username
+        for u in db.query(User).all()
+    }
 
+    # 🔥 AGRUPAR POR USUARIO + DÍA
     agrupado = defaultdict(lambda: defaultdict(list))
 
     for r in registros:
-        agrupado[r.user_id][r.fecha.date()].append(r)
+
+        fecha_chile = (
+            r.fecha.replace(tzinfo=ZoneInfo("UTC"))
+            .astimezone(chile_tz)
+        )
+
+        agrupado[r.user_id][fecha_chile.date()].append({
+            "registro": r,
+            "fecha_chile": fecha_chile
+        })
 
     wb = Workbook()
+
+    # =========================================================
+    # 🔥 HOJA 1 — RESUMEN
+    # =========================================================
+
     ws = wb.active
-    ws.title = "Reporte RRHH"
+    ws.title = "Resumen RRHH"
 
     headers = [
         "Usuario",
@@ -453,12 +483,47 @@ def exportar_excel(
 
     ws.append(headers)
 
-    # estilos
-    fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+    fill = PatternFill(
+        start_color="1F4E78",
+        end_color="1F4E78",
+        fill_type="solid"
+    )
 
     for cell in ws[1]:
-        cell.font = Font(bold=True, color="FFFFFF")
+        cell.font = Font(
+            bold=True,
+            color="FFFFFF"
+        )
         cell.fill = fill
+
+    # =========================================================
+    # 🔥 HOJA 2 — MARCAJES
+    # =========================================================
+
+    ws2 = wb.create_sheet(title="Marcajes")
+
+    headers2 = [
+        "Usuario",
+        "Fecha",
+        "Entrada",
+        "Salida Colación",
+        "Entrada Colación",
+        "Salida",
+        "Horas Trabajadas"
+    ]
+
+    ws2.append(headers2)
+
+    for cell in ws2[1]:
+        cell.font = Font(
+            bold=True,
+            color="FFFFFF"
+        )
+        cell.fill = fill
+
+    # =========================================================
+    # 🔥 RECORRER USUARIOS
+    # =========================================================
 
     for uid, dias in agrupado.items():
 
@@ -472,66 +537,103 @@ def exportar_excel(
 
         for fecha, registros_dia in dias.items():
 
-            registros_dia.sort(key=lambda x: x.fecha)
+            registros_dia.sort(
+                key=lambda x: x["fecha_chile"]
+            )
 
             entrada = None
             salida = None
             salida_colacion = None
             entrada_colacion = None
 
-            for r in registros_dia:
+            # 🔥 BUSCAR MARCAS
+            for item in registros_dia:
+
+                r = item["registro"]
+                fecha_local = item["fecha_chile"]
 
                 if r.tipo == "entrada":
-                    entrada = r.fecha
+                    entrada = fecha_local
 
-                    # atraso después 10 AM
-                    if r.fecha.hour >= 10:
+                    # atraso después de 10 AM
+                    if fecha_local.hour >= 10:
                         atrasos += 1
 
                 elif r.tipo == "salida":
-                    salida = r.fecha
+                    salida = fecha_local
 
-                    if r.fecha.hour < 18:
+                    # retiro antes 18 hrs
+                    if fecha_local.hour < 18:
                         retiros += 1
 
                 elif r.tipo == "salida_colacion":
-                    salida_colacion = r.fecha
+                    salida_colacion = fecha_local
 
                 elif r.tipo == "entrada_colacion":
-                    entrada_colacion = r.fecha
+                    entrada_colacion = fecha_local
 
+            total_segundos = 0
+
+            # 🔥 CALCULAR HORAS
             if entrada and salida:
 
                 dias_trabajados += 1
 
-                total = (salida - entrada).total_seconds()
+                total_segundos = (
+                    salida - entrada
+                ).total_seconds()
 
                 colacion_seg = 0
 
                 if salida_colacion and entrada_colacion:
+
                     colacion_seg = (
                         entrada_colacion - salida_colacion
                     ).total_seconds()
 
-                    total -= colacion_seg
+                    total_segundos -= colacion_seg
 
-                horas_totales += total
+                horas_totales += total_segundos
                 horas_colacion_total += colacion_seg
 
                 # horas extra > 9 horas
-                if total > (9 * 3600):
-                    horas_extras += (total - (9 * 3600))
+                if total_segundos > (9 * 3600):
+
+                    horas_extras += (
+                        total_segundos - (9 * 3600)
+                    )
 
             else:
                 incompletos += 1
 
-        # promedio
+            # =================================================
+            # 🔥 INSERTAR MARCAJES EN EXCEL
+            # =================================================
+
+            def format_hora(dt):
+                return dt.strftime("%H:%M") if dt else "-"
+
+            def format_horas(segundos):
+                horas = int(segundos // 3600)
+                minutos = int((segundos % 3600) // 60)
+                return f"{horas}h {minutos}m"
+
+            ws2.append([
+                users.get(uid, f"User {uid}"),
+                fecha.strftime("%d-%m-%Y"),
+                format_hora(entrada),
+                format_hora(salida_colacion),
+                format_hora(entrada_colacion),
+                format_hora(salida),
+                format_horas(total_segundos)
+            ])
+
         promedio = (
             horas_totales / dias_trabajados
             if dias_trabajados > 0 else 0
         )
 
-        # calcular días laborales del rango
+        # 🔥 días laborales aproximados
         dias_laborales = 22
 
         asistencia = (
@@ -543,6 +645,10 @@ def exportar_excel(
             horas = int(segundos // 3600)
             minutos = int((segundos % 3600) // 60)
             return f"{horas}h {minutos}m"
+
+        # =====================================================
+        # 🔥 INSERTAR RESUMEN
+        # =====================================================
 
         ws.append([
             users.get(uid, f"User {uid}"),
@@ -557,34 +663,46 @@ def exportar_excel(
             incompletos
         ])
 
-    # ajustar ancho columnas
-    for col in ws.columns:
-        max_length = 0
-        column = get_column_letter(col[0].column)
+    # =========================================================
+    # 🔥 AUTO WIDTH
+    # =========================================================
 
-        for cell in col:
-            try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(str(cell.value))
-            except:
-                pass
+    for hoja in [ws, ws2]:
 
-        adjusted_width = max_length + 5
-        ws.column_dimensions[column].width = adjusted_width
+        for col in hoja.columns:
+
+            max_length = 0
+
+            column = get_column_letter(
+                col[0].column
+            )
+
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+
+            hoja.column_dimensions[column].width = max_length + 5
+
+    # =========================================================
+    # 🔥 GUARDAR
+    # =========================================================
 
     file_path = "reporte_rrhh.xlsx"
 
     wb.save(file_path)
 
     return FileResponse(
-    path=file_path,
-    filename="reporte_asistencia.xlsx",
-    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    headers={
-        "Content-Disposition":
-        "attachment; filename=reporte_asistencia.xlsx"
-    }
-)
+        path=file_path,
+        filename="reporte_asistencia.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition":
+            "attachment; filename=reporte_asistencia.xlsx"
+        }
+    )
 def require_admin(user):
     if user.rol != "admin":
         raise HTTPException(status_code=403, detail="No autorizado")
