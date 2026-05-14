@@ -166,6 +166,7 @@ def marcar(data: dict, db: Session = Depends(get_db)):
 
     nuevo = Attendance(
         user_id=user_id,
+        username=user.username,
         lat=lat,
         lng=lng,
         fecha=datetime.now(ZoneInfo("America/Santiago")).replace(tzinfo=None),
