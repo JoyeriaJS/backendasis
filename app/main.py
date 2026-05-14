@@ -26,6 +26,7 @@ import qrcode
 from io import BytesIO
 from fastapi.responses import StreamingResponse
 from app.mail_service import enviar_comprobante
+from app.horarios import HORARIOS
 
 
 app = FastAPI()
@@ -104,6 +105,18 @@ def exportar_excel(
     db: Session = Depends(get_db)
 ):
 
+    from collections import defaultdict
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    from fastapi.responses import FileResponse
+
+    from app.horarios import HORARIOS
+
     query = db.query(Attendance)
 
     # 🔍 FILTROS
@@ -113,6 +126,7 @@ def exportar_excel(
         )
 
     if fecha_inicio:
+
         fi = datetime.strptime(
             fecha_inicio,
             "%Y-%m-%d"
@@ -123,6 +137,7 @@ def exportar_excel(
         )
 
     if fecha_fin:
+
         ff = datetime.strptime(
             fecha_fin,
             "%Y-%m-%d"
@@ -139,18 +154,23 @@ def exportar_excel(
     )
 
     users = {
-        u.id: u.username
+        u.id: u
         for u in db.query(User).all()
     }
 
-    # 📦 AGRUPAR POR USUARIO Y FECHA
+    # 📦 AGRUPAR
     agrupado = defaultdict(
         lambda: defaultdict(list)
     )
 
     for r in registros:
 
-        fecha_dia = r.fecha.date()
+        fecha_chile = (
+            r.fecha
+            .replace(tzinfo=ZoneInfo("America/Santiago"))
+        )
+
+        fecha_dia = fecha_chile.date()
 
         agrupado[r.user_id][fecha_dia].append(r)
 
@@ -161,7 +181,9 @@ def exportar_excel(
     ws.title = "Reporte RRHH"
 
     headers = [
+
         "Usuario",
+        "Rol",
         "Fecha",
 
         "Entrada",
@@ -178,7 +200,7 @@ def exportar_excel(
 
     ws.append(headers)
 
-    # 🎨 ESTILOS
+    # 🎨 HEADER
     fill = PatternFill(
         start_color="1F4E78",
         end_color="1F4E78",
@@ -186,6 +208,7 @@ def exportar_excel(
     )
 
     for cell in ws[1]:
+
         cell.font = Font(
             bold=True,
             color="FFFFFF"
@@ -193,10 +216,41 @@ def exportar_excel(
 
         cell.fill = fill
 
+    # 📅 DÍAS
+    dias_semana = [
+        "lunes",
+        "martes",
+        "miercoles",
+        "jueves",
+        "viernes",
+        "sabado",
+        "domingo"
+    ]
+
     # 📊 RECORRER
     for uid, dias in agrupado.items():
 
+        user = users.get(uid)
+
+        if not user:
+            continue
+
+        role = user.role or "vendedora"
+
         for fecha, registros_dia in dias.items():
+
+            nombre_dia = dias_semana[
+                fecha.weekday()
+            ]
+
+            config = HORARIOS.get(
+                role,
+                {}
+            ).get(nombre_dia)
+
+            # 🚫 SI NO TRABAJA ESE DÍA
+            if not config:
+                continue
 
             registros_dia.sort(
                 key=lambda x: x.fecha
@@ -209,17 +263,26 @@ def exportar_excel(
 
             for r in registros_dia:
 
+                fecha_chile = (
+                    r.fecha
+                    .replace(
+                        tzinfo=ZoneInfo(
+                            "America/Santiago"
+                        )
+                    )
+                )
+
                 if r.tipo == "entrada":
-                    entrada = r.fecha
+                    entrada = fecha_chile
 
                 elif r.tipo == "salida_colacion":
-                    salida_colacion = r.fecha
+                    salida_colacion = fecha_chile
 
                 elif r.tipo == "entrada_colacion":
-                    entrada_colacion = r.fecha
+                    entrada_colacion = fecha_chile
 
                 elif r.tipo == "salida":
-                    salida = r.fecha
+                    salida = fecha_chile
 
             # ⏱️ HORAS
             total_horas_dia = 0
@@ -258,14 +321,30 @@ def exportar_excel(
             atrasado = "NO"
 
             if entrada:
-                if entrada.hour >= 10:
+
+                hora_entrada = config["entrada"]
+
+                hora_real = (
+                    entrada.hour
+                    + (entrada.minute / 60)
+                )
+
+                if hora_real > hora_entrada:
                     atrasado = "SI"
 
             # 🚨 RETIRO
             retiro_anticipado = "NO"
 
             if salida:
-                if salida.hour < 18:
+
+                hora_salida = config["salida"]
+
+                hora_real_salida = (
+                    salida.hour
+                    + (salida.minute / 60)
+                )
+
+                if hora_real_salida < hora_salida:
                     retiro_anticipado = "SI"
 
             # 🚨 INCOMPLETO
@@ -277,7 +356,7 @@ def exportar_excel(
             ):
                 incompleto = "SI"
 
-            # 🕒 HORAS DIRECTAS
+            # 🕒 HORAS
             entrada_hora = (
                 entrada.strftime("%H:%M")
                 if entrada else "-"
@@ -300,7 +379,9 @@ def exportar_excel(
 
             # 📝 FILA
             ws.append([
-                users.get(uid, f"User {uid}"),
+
+                user.username,
+                role,
                 str(fecha),
 
                 entrada_hora,
@@ -327,6 +408,7 @@ def exportar_excel(
         for cell in col:
 
             try:
+
                 if len(str(cell.value)) > max_length:
 
                     max_length = len(

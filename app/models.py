@@ -9,7 +9,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True)
     password = Column(String)
-    role = Column(String, default="user")  # "admin" o "user"
+    role = Column(String, default="vendedora")  # "admin" o "user"
     totp_secret = Column(String, nullable=True)
 
 
