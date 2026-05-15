@@ -1080,14 +1080,29 @@ def authenticator_qr(
 
 @app.get("/audit-logs")
 def obtener_auditoria(
+    user_id: int,
     db: Session = Depends(get_db)
 ):
 
+    # 🔒 validar usuario
+    user = db.query(User).filter(
+        User.id == user_id
+    ).first()
+
+    # 🔒 validar admin
+    if not user or user.role != "admin":
+
+        raise HTTPException(
+            status_code=403,
+            detail="No autorizado"
+        )
+
+    # 📋 obtener logs
     logs = (
-    db.query(AuditLog)
-    .order_by(AuditLog.fecha.desc())
-    .limit(100)
-    .all()
+        db.query(AuditLog)
+        .order_by(AuditLog.fecha.desc())
+        .limit(100)
+        .all()
     )
 
     return [
